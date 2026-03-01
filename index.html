@@ -144,7 +144,7 @@ ALTER TABLE records ENABLE ROW LEVEL SECURITY;</pre>
 <!-- ============================================================
      MAIN APP
      ============================================================ -->
-<div id="app" class="h-full w-full flex flex-col overflow-auto" style="display:none!important;">
+<div id="app" class="h-full w-full flex flex-col overflow-auto" style="display:none;">
   <!-- Header -->
   <header class="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 text-white px-4 py-4 shadow-xl">
     <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -470,12 +470,12 @@ function resetConnection() {
 }
 
 async function launchApp() {
+  // Hide the setup overlay
   document.getElementById('setup-overlay').style.display = 'none';
+
+  // Show the main app - simple and direct
   const appEl = document.getElementById('app');
-  appEl.style.removeProperty('display');
-  appEl.classList.remove('hidden');
-  appEl.style.display = 'flex';
-  appEl.style.flexDirection = 'column';
+  appEl.style.cssText = 'display:flex !important; flex-direction:column; min-height:100vh;';
 
   await loadAllData();
   subscribeRealtime();
