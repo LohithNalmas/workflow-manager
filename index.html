@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workflow Manager</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- ✅ SUPABASE SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    * { font-family: 'DM Sans', sans-serif; }
+    code, .mono { font-family: 'DM Mono', monospace; }
+    .tab-active { background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); color: white; }
+    .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .card-hover { transition: all 0.2s ease; }
+    .card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-in { animation: slideIn 0.3s ease forwards; }
+    .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+    /* Setup overlay */
+    #setup-overlay {
+      position: fixed; inset: 0; background: linear-gradient(135deg, #0f172a, #1e3a5f);
+      z-index: 9999; display: flex; align-items: center; justify-content: center;
+    }
+    .setup-card {
+      background: white; border-radius: 24px; padding: 40px;
+      max-width: 560px; width: 100%; margin: 20px; box-shadow: 0 40px 80px rgba(0,0,0,0.4);
+    }
+    .setup-input {
+      width: 100%; padding: 12px 16px; border: 2px solid #e2e8f0; border-radius: 12px;
+      font-size: 13px; font-family: 'DM Mono', monospace; transition: all 0.2s;
+      outline: none;
+    }
+    .setup-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+    .setup-btn {
+      width: 100%; padding: 14px; background: linear-gradient(135deg, #1e3a5f, #3b82f6);
+      color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s; margin-top: 8px;
+    }
+    .setup-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .step-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; background: #1e3a5f; color: white;
+      border-radius: 50%; font-size: 12px; font-weight: 700; flex-shrink: 0;
+    }
+    body { box-sizing: border-box; }
+  </style>
+</head>
+<body class="h-full bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
+
+<!-- ============================================================
+     🔧 SUPABASE SETUP OVERLAY
+     This shows on first load. Users paste their credentials.
+     ============================================================ -->
+<div id="setup-overlay">
+  <div class="setup-card">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;">
+      <div style="width:48px;height:48px;background:linear-gradient(135deg,#1e3a5f,#3b82f6);border-radius:12px;display:flex;align-items:center;justify-content:center;">
+        <svg width="24" height="24" fill="none" stroke="white" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582 4 8 4s8 1.79 8 4"/></svg>
+      </div>
+      <div>
+        <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0;">Connect Supabase</h2>
+        <p style="font-size:13px;color:#64748b;margin:0;">One-time setup to link your database</p>
+      </div>
+    </div>
+
+    <!-- Step-by-step instructions -->
+    <div style="background:#f8fafc;border-radius:12px;padding:16px;margin-bottom:20px;border:1px solid #e2e8f0;">
+      <p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 12px;">Quick Setup (2 minutes):</p>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+          <span class="step-badge">1</span>
+          <p style="font-size:13px;color:#475569;margin:0;">Go to <a href="https://supabase.com" target="_blank" style="color:#3b82f6;font-weight:600;">supabase.com</a> → Create a free account → New Project</p>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+          <span class="step-badge">2</span>
+          <p style="font-size:13px;color:#475569;margin:0;">In your project: go to <strong>Project Settings → API</strong> and copy your <strong>Project URL</strong> and <strong>anon/public key</strong></p>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+          <span class="step-badge">3</span>
+          <p style="font-size:13px;color:#475569;margin:0;">Go to <strong>SQL Editor</strong> and run the setup SQL below, then paste your credentials here</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SQL snippet -->
+    <details style="margin-bottom:16px;">
+      <summary style="font-size:13px;font-weight:600;color:#374151;cursor:pointer;padding:8px 0;">📋 Click to view required SQL (run in Supabase SQL Editor)</summary>
+      <pre style="background:#0f172a;color:#7dd3fc;padding:14px;border-radius:10px;font-size:11px;overflow-x:auto;margin-top:8px;line-height:1.7;" class="mono">-- Run this in Supabase SQL Editor:
+
+CREATE TABLE IF NOT EXISTS records (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  type TEXT NOT NULL,
+  invoice_number TEXT,
+  party_name TEXT,
+  item_count INTEGER,
+  status TEXT DEFAULT 'pending',
+  picker_id TEXT DEFAULT '',
+  picker_name TEXT DEFAULT '',
+  checker_id TEXT DEFAULT '',
+  checker_name TEXT DEFAULT '',
+  picking_done_at TIMESTAMPTZ,
+  checking_done_at TIMESTAMPTZ,
+  packing_done_at TIMESTAMPTZ,
+  delivered_at TIMESTAMPTZ,
+  employee_name TEXT,
+  employee_role TEXT,
+  employee_level TEXT,
+  employee_available BOOLEAN DEFAULT true,
+  employee_present BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Enable real-time for the table:
+ALTER TABLE records REPLICA IDENTITY FULL;
+
+-- Allow public access (adjust for production):
+CREATE POLICY "allow_all" ON records FOR ALL USING (true) WITH CHECK (true);
+ALTER TABLE records ENABLE ROW LEVEL SECURITY;</pre>
+    </details>
+
+    <!-- Credentials input -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Supabase Project URL</label>
+        <input type="text" id="setup-url" class="setup-input" placeholder="https://xxxxxxxxxxxx.supabase.co">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Supabase Anon/Public Key</label>
+        <input type="text" id="setup-key" class="setup-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+      </div>
+      <p id="setup-error" style="color:#ef4444;font-size:12px;display:none;"></p>
+      <button class="setup-btn" onclick="connectSupabase()">🚀 Connect & Launch App</button>
+      <p style="font-size:11px;color:#94a3b8;text-align:center;margin:0;">Credentials are saved in your browser's localStorage only.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MAIN APP
+     ============================================================ -->
+<div id="app" class="h-full w-full flex flex-col overflow-auto" style="display:none!important;">
+  <!-- Header -->
+  <header class="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 text-white px-4 py-4 shadow-xl">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center shadow-lg">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold">Workflow Manager</h1>
+          <p class="text-xs text-slate-300">Powered by Supabase</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="sync-status" class="px-3 py-1 bg-emerald-500/20 text-emerald-300 rounded-full text-xs font-medium">● Live Sync</span>
+        <button onclick="resetConnection()" title="Change Supabase credentials" class="px-2 py-1 bg-slate-600 hover:bg-slate-500 text-slate-300 rounded-lg text-xs transition-all">⚙ Reset DB</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="bg-white shadow-sm border-b border-slate-200 px-4 py-2 sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto flex gap-1 overflow-x-auto scrollbar-thin">
+      <button onclick="switchTab('orders')" id="tab-orders" class="tab-active px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all">📦 Orders</button>
+      <button onclick="switchTab('employees')" id="tab-employees" class="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 whitespace-nowrap transition-all">👥 Employees</button>
+      <button onclick="switchTab('analytics')" id="tab-analytics" class="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 whitespace-nowrap transition-all">📊 Analytics</button>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="flex-1 p-4 max-w-7xl mx-auto w-full">
+
+    <!-- Orders Tab -->
+    <div id="content-orders" class="animate-in">
+      <!-- New Order Form -->
+      <div class="bg-white rounded-2xl shadow-lg p-6 mb-6 border border-slate-100">
+        <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><span class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">➕</span> New Order</h2>
+        <form id="order-form" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Invoice Number</label>
+            <input type="text" id="invoice-number" required class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" placeholder="INV-001">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Party Name</label>
+            <input type="text" id="party-name" required class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" placeholder="Customer name">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Number of Items</label>
+            <input type="number" id="item-count" required min="1" class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" placeholder="10">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Assignment</label>
+            <div class="flex gap-2">
+              <select id="picker-select" class="flex-1 px-3 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm">
+                <option value="auto">Auto Assign</option>
+              </select>
+              <button type="submit" class="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-medium hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-500/25">Create</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Picking Queue -->
+      <div class="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden mb-6">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-amber-50 to-orange-50">
+          <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2"><span class="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">🔍</span> Picking Queue</h2>
+          <span id="picking-count" class="text-sm text-slate-500">0 items</span>
+        </div>
+        <div id="picking-list" class="divide-y divide-slate-100 max-h-80 overflow-y-auto scrollbar-thin">
+          <div class="p-8 text-center text-slate-400"><p>No items awaiting picking.</p></div>
+        </div>
+      </div>
+
+      <!-- Checking Queue -->
+      <div class="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden mb-6">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-blue-50 to-cyan-50">
+          <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2"><span class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">✓</span> Checking Queue</h2>
+          <span id="checking-count" class="text-sm text-slate-500">0 items</span>
+        </div>
+        <div id="checking-list" class="divide-y divide-slate-100 max-h-80 overflow-y-auto scrollbar-thin">
+          <div class="p-8 text-center text-slate-400"><p>No items awaiting checking.</p></div>
+        </div>
+      </div>
+
+      <!-- All Orders -->
+      <div class="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <h2 class="text-lg font-bold text-slate-800">All Orders</h2>
+          <span id="order-count" class="text-sm text-slate-500">0 orders</span>
+        </div>
+        <div id="orders-list" class="divide-y divide-slate-100 max-h-96 overflow-y-auto scrollbar-thin">
+          <div class="p-8 text-center text-slate-400"><p>No orders yet. Create your first order above.</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Employees Tab -->
+    <div id="content-employees" class="hidden animate-in">
+      <div class="bg-white rounded-2xl shadow-lg p-6 mb-6 border border-slate-100">
+        <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><span class="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">👤</span> Add Employee</h2>
+        <form id="employee-form" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Name</label>
+            <input type="text" id="emp-name" required class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all" placeholder="Employee name">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Role</label>
+            <select id="emp-role" class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all">
+              <option value="picker">Picker</option>
+              <option value="checker">Checker</option>
+              <option value="both">Picker & Checker</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Level</label>
+            <select id="emp-level" class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all">
+              <option value="junior">Junior (1-10 items)</option>
+              <option value="intermediate">Intermediate (11-20 items)</option>
+              <option value="senior">Senior (21-50 items)</option>
+              <option value="expert">Expert (50+ items)</option>
+            </select>
+          </div>
+          <div class="flex items-end gap-2">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="emp-available" checked class="w-5 h-5 rounded text-emerald-500 focus:ring-emerald-500">
+              <span class="text-sm text-slate-600">Available</span>
+            </label>
+          </div>
+          <div class="flex items-end">
+            <button type="submit" class="w-full px-6 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-xl font-medium hover:from-emerald-700 hover:to-emerald-800 transition-all shadow-lg shadow-emerald-500/25">Add Employee</button>
+          </div>
+        </form>
+      </div>
+      <div class="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <h2 class="text-lg font-bold text-slate-800">Team Members</h2>
+          <span id="employee-count" class="text-sm text-slate-500">0 employees</span>
+        </div>
+        <div id="employees-list" class="divide-y divide-slate-100 max-h-96 overflow-y-auto scrollbar-thin">
+          <div class="p-8 text-center text-slate-400"><p>No employees yet. Add team members above.</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Analytics Tab -->
+    <div id="content-analytics" class="hidden animate-in">
+      <!-- Data Management -->
+      <div class="bg-white rounded-2xl shadow-lg p-6 mb-6 border border-slate-100">
+        <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><span class="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">🗑️</span> Data Management</h2>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="border border-slate-200 rounded-xl p-4">
+            <h3 class="font-semibold text-slate-700 mb-3">Delete Orders by Time Period</h3>
+            <div class="space-y-3">
+              <div>
+                <label class="block text-xs font-medium text-slate-500 mb-1">Select Time Period</label>
+                <select id="delete-period" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all text-sm">
+                  <option value="7days">Last 7 Days</option>
+                  <option value="30days">Last 30 Days</option>
+                  <option value="90days">Last 90 Days</option>
+                  <option value="6months">Last 6 Months</option>
+                  <option value="1year">Last 1 Year</option>
+                  <option value="all">All Orders</option>
+                </select>
+              </div>
+              <button onclick="deleteOrdersByPeriod()" class="w-full px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all font-medium text-sm">Delete Orders</button>
+            </div>
+          </div>
+          <div class="border border-slate-200 rounded-xl p-4">
+            <h3 class="font-semibold text-slate-700 mb-3">Database Info</h3>
+            <div class="space-y-2">
+              <p class="text-sm text-slate-600">Total records: <strong id="total-records">—</strong></p>
+              <p class="text-sm text-slate-600">Orders: <strong id="total-orders-count">—</strong></p>
+              <p class="text-sm text-slate-600">Employees: <strong id="total-employees-count">—</strong></p>
+              <p class="text-xs text-emerald-600 mt-2">✅ Supabase free tier supports 500MB / unlimited rows</p>
+            </div>
+          </div>
+        </div>
+        <div class="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <p class="text-xs text-amber-800"><strong>⚠️ Warning:</strong> Deleted orders cannot be recovered. Only delivered orders will be deleted.</p>
+        </div>
+      </div>
+
+      <!-- Stats Cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-5 text-white shadow-lg shadow-blue-500/25">
+          <p class="text-blue-100 text-xs font-medium mb-1">Total Orders</p>
+          <p id="stat-total" class="text-3xl font-bold">0</p>
+        </div>
+        <div class="bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl p-5 text-white shadow-lg shadow-amber-500/25">
+          <p class="text-amber-100 text-xs font-medium mb-1">In Progress</p>
+          <p id="stat-progress" class="text-3xl font-bold">0</p>
+        </div>
+        <div class="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-5 text-white shadow-lg shadow-emerald-500/25">
+          <p class="text-emerald-100 text-xs font-medium mb-1">Delivered</p>
+          <p id="stat-delivered" class="text-3xl font-bold">0</p>
+        </div>
+        <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-5 text-white shadow-lg shadow-purple-500/25">
+          <p class="text-purple-100 text-xs font-medium mb-1">Active Staff</p>
+          <p id="stat-staff" class="text-3xl font-bold">0</p>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
+          <h3 class="text-lg font-bold text-slate-800 mb-4">Order Status Distribution</h3>
+          <div id="status-chart" class="space-y-3"><div class="text-center text-slate-400 py-8">No data available</div></div>
+        </div>
+        <div class="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
+          <h3 class="text-lg font-bold text-slate-800 mb-4">Employee Performance</h3>
+          <div id="performance-chart" class="space-y-3"><div class="text-center text-slate-400 py-8">No data available</div></div>
+        </div>
+        <div class="bg-white rounded-2xl shadow-lg p-6 border border-slate-100 lg:col-span-2">
+          <h3 class="text-lg font-bold text-slate-800 mb-4">Recent Activity</h3>
+          <div id="activity-log" class="space-y-2 max-h-64 overflow-y-auto scrollbar-thin">
+            <div class="text-center text-slate-400 py-8">No recent activity</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+
+  <!-- Confirmation Modal -->
+  <div id="confirm-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+      <h3 id="confirm-title" class="text-lg font-bold text-slate-800 mb-2">Confirm Action</h3>
+      <p id="confirm-message" class="text-slate-600 mb-6">Are you sure?</p>
+      <div class="flex gap-3">
+        <button onclick="closeConfirmModal()" class="flex-1 px-4 py-2 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-all">Cancel</button>
+        <button id="confirm-btn" class="flex-1 px-4 py-2 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-all">Confirm</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     JAVASCRIPT — SUPABASE INTEGRATION
+     ============================================================ -->
+<script>
+// ──────────────────────────────────────────────
+//  GLOBALS
+// ──────────────────────────────────────────────
+let supabase = null;
+let orders = [];
+let employees = [];
+let currentTab = 'orders';
+let pendingConfirmAction = null;
+let realtimeChannel = null;
+
+// ──────────────────────────────────────────────
+//  SETUP / CONNECTION
+// ──────────────────────────────────────────────
+async function connectSupabase() {
+  const url = document.getElementById('setup-url').value.trim();
+  const key = document.getElementById('setup-key').value.trim();
+  const errEl = document.getElementById('setup-error');
+
+  if (!url || !key) {
+    errEl.textContent = 'Please enter both your Project URL and Anon Key.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (!url.startsWith('https://')) {
+    errEl.textContent = 'URL must start with https://';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  errEl.style.display = 'none';
+
+  try {
+    supabase = window.supabase.createClient(url, key);
+
+    // Test connection
+    const { error } = await supabase.from('records').select('id').limit(1);
+    if (error) {
+      errEl.textContent = `Connection failed: ${error.message}. Make sure you ran the setup SQL and the "records" table exists.`;
+      errEl.style.display = 'block';
+      return;
+    }
+
+    // Save to localStorage
+    localStorage.setItem('sb_url', url);
+    localStorage.setItem('sb_key', key);
+
+    // Launch app
+    launchApp();
+  } catch (e) {
+    errEl.textContent = `Error: ${e.message}`;
+    errEl.style.display = 'block';
+  }
+}
+
+function resetConnection() {
+  if (!confirm('This will disconnect from Supabase. You will need to enter credentials again. Continue?')) return;
+  localStorage.removeItem('sb_url');
+  localStorage.removeItem('sb_key');
+  if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+  document.getElementById('setup-overlay').style.display = 'flex';
+  document.getElementById('app').style.display = 'none !important';
+  document.getElementById('app').style.removeProperty('display');
+  document.getElementById('app').classList.add('hidden');
+}
+
+async function launchApp() {
+  document.getElementById('setup-overlay').style.display = 'none';
+  const appEl = document.getElementById('app');
+  appEl.style.removeProperty('display');
+  appEl.classList.remove('hidden');
+  appEl.style.display = 'flex';
+  appEl.style.flexDirection = 'column';
+
+  await loadAllData();
+  subscribeRealtime();
+}
+
+// Auto-connect if credentials saved
+window.addEventListener('DOMContentLoaded', async () => {
+  const url = localStorage.getItem('sb_url');
+  const key = localStorage.getItem('sb_key');
+  if (url && key) {
+    document.getElementById('setup-url').value = url;
+    document.getElementById('setup-key').value = key;
+    supabase = window.supabase.createClient(url, key);
+    try {
+      const { error } = await supabase.from('records').select('id').limit(1);
+      if (!error) {
+        launchApp();
+        return;
+      }
+    } catch (e) {}
+    // Credentials stale — show setup
+    document.getElementById('setup-overlay').style.display = 'flex';
+  }
+});
+
+// ──────────────────────────────────────────────
+//  DATA LOADING
+// ──────────────────────────────────────────────
+async function loadAllData() {
+  const { data, error } = await supabase
+    .from('records')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    showToast('Failed to load data: ' + error.message, 'error');
+    return;
+  }
+
+  orders = data.filter(d => d.type === 'order');
+  employees = data.filter(d => d.type === 'employee');
+  renderAll();
+}
+
+// ──────────────────────────────────────────────
+//  REAL-TIME SUBSCRIPTIONS
+// ──────────────────────────────────────────────
+function subscribeRealtime() {
+  realtimeChannel = supabase
+    .channel('records-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'records' }, async (payload) => {
+      // Re-fetch on any change for simplicity & consistency
+      await loadAllData();
+    })
+    .subscribe((status) => {
+      const el = document.getElementById('sync-status');
+      if (status === 'SUBSCRIBED') {
+        el.textContent = '● Live Sync';
+        el.className = 'px-3 py-1 bg-emerald-500/20 text-emerald-300 rounded-full text-xs font-medium';
+      } else {
+        el.textContent = '○ Connecting...';
+        el.className = 'px-3 py-1 bg-amber-500/20 text-amber-300 rounded-full text-xs font-medium';
+      }
+    });
+}
+
+// ──────────────────────────────────────────────
+//  CRUD HELPERS
+// ──────────────────────────────────────────────
+async function dbCreate(data) {
+  const { data: result, error } = await supabase.from('records').insert([data]).select().single();
+  if (error) throw new Error(error.message);
+  return result;
+}
+
+async function dbUpdate(id, data) {
+  const { error } = await supabase.from('records').update(data).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+async function dbDelete(id) {
+  const { error } = await supabase.from('records').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+// ──────────────────────────────────────────────
+//  EMPLOYEE HELPERS
+// ──────────────────────────────────────────────
+function getSuitablePicker(itemCount) {
+  const available = employees.filter(e =>
+    (e.employee_role === 'picker' || e.employee_role === 'both') &&
+    e.employee_available && e.employee_present
+  );
+  if (!available.length) return null;
+
+  let targetLevel;
+  if (itemCount > 50) targetLevel = 'expert';
+  else if (itemCount > 20) targetLevel = 'senior';
+  else if (itemCount > 10) targetLevel = 'intermediate';
+  else targetLevel = 'junior';
+
+  const levelOrder = ['junior', 'intermediate', 'senior', 'expert'];
+  const idx = levelOrder.indexOf(targetLevel);
+
+  for (let i = idx; i < levelOrder.length; i++) {
+    const p = available.find(e => e.employee_level === levelOrder[i]);
+    if (p) return p;
+  }
+  return available[0];
+}
+
+function getSuitableChecker(pickerId) {
+  const available = employees.filter(e =>
+    (e.employee_role === 'checker' || e.employee_role === 'both') &&
+    e.employee_available && e.employee_present && e.id !== pickerId
+  );
+  return available.length ? available[0] : null;
+}
+
+function updatePickerSelect() {
+  const select = document.getElementById('picker-select');
+  const cur = select.value;
+  select.innerHTML = '<option value="auto">Auto Assign</option>';
+  employees
+    .filter(e => (e.employee_role === 'picker' || e.employee_role === 'both') && e.employee_available && e.employee_present)
+    .forEach(emp => {
+      const o = document.createElement('option');
+      o.value = emp.id;
+      o.textContent = `${emp.employee_name} (${emp.employee_level})`;
+      select.appendChild(o);
+    });
+  if (select.querySelector(`option[value="${cur}"]`)) select.value = cur;
+}
+
+// ──────────────────────────────────────────────
+//  RENDER FUNCTIONS
+// ──────────────────────────────────────────────
+function renderAll() {
+  renderOrders();
+  renderPickingQueue();
+  renderCheckingQueue();
+  renderEmployees();
+  updatePickerSelect();
+  if (currentTab === 'analytics') renderAnalytics();
+}
+
+function renderOrders() {
+  const container = document.getElementById('orders-list');
+  document.getElementById('order-count').textContent = `${orders.length} orders`;
+
+  if (!orders.length) {
+    container.innerHTML = '<div class="p-8 text-center text-slate-400"><p>No orders yet. Create your first order above.</p></div>';
+    return;
+  }
+
+  const statusColors = {
+    pending: 'bg-slate-100 text-slate-600', picking: 'bg-amber-100 text-amber-700',
+    checking: 'bg-blue-100 text-blue-700', packing: 'bg-purple-100 text-purple-700',
+    ready: 'bg-emerald-100 text-emerald-700', delivered: 'bg-emerald-500 text-white'
+  };
+  const statusLabels = {
+    pending: 'Pending', picking: 'Picking', checking: 'Checking',
+    packing: 'Packing', ready: 'Ready', delivered: 'Delivered'
+  };
+
+  container.innerHTML = orders.map(order => {
+    let actionButton = '';
+    if (order.status === 'picking') actionButton = `<button onclick="markPickingDone('${order.id}')" class="px-3 py-1 bg-amber-500 text-white rounded-lg text-xs font-medium hover:bg-amber-600 transition-all">Mark Picking Done</button>`;
+    else if (order.status === 'checking') actionButton = `<button onclick="markCheckingDone('${order.id}')" class="px-3 py-1 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 transition-all">Mark Checking Done</button>`;
+    else if (order.status === 'packing') actionButton = `<button onclick="markPackingDone('${order.id}')" class="px-3 py-1 bg-purple-500 text-white rounded-lg text-xs font-medium hover:bg-purple-600 transition-all">Mark Packing Done</button>`;
+    else if (order.status === 'ready') actionButton = `<button onclick="markDelivered('${order.id}')" class="px-3 py-1 bg-emerald-500 text-white rounded-lg text-xs font-medium hover:bg-emerald-600 transition-all">Mark Delivered</button>`;
+    else if (order.status === 'pending') actionButton = `<button onclick="assignPicker('${order.id}')" class="px-3 py-1 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 transition-all">Assign Picker</button>`;
+
+    return `
+      <div class="p-4 hover:bg-slate-50 transition-all card-hover">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="flex-1">
+            <div class="flex items-center gap-3 mb-2">
+              <span class="font-bold text-slate-800">${order.invoice_number}</span>
+              <span class="status-badge ${statusColors[order.status] || statusColors.pending}">${statusLabels[order.status] || 'Unknown'}</span>
+            </div>
+            <p class="text-sm text-slate-600 mb-1">👤 ${order.party_name} • 📦 ${order.item_count} items</p>
+            <div class="flex flex-wrap gap-2 text-xs text-slate-500">
+              ${order.picker_name ? `<span class="bg-slate-100 px-2 py-1 rounded">Picker: ${order.picker_name}</span>` : ''}
+              ${order.checker_name ? `<span class="bg-slate-100 px-2 py-1 rounded">Checker: ${order.checker_name}</span>` : ''}
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            ${actionButton}
+            <button onclick="deleteOrder('${order.id}')" class="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderPickingQueue() {
+  const container = document.getElementById('picking-list');
+  const items = orders.filter(o => o.status === 'picking');
+  document.getElementById('picking-count').textContent = `${items.length} items`;
+  if (!items.length) { container.innerHTML = '<div class="p-8 text-center text-slate-400"><p>No items awaiting picking.</p></div>'; return; }
+  container.innerHTML = items.map(order => `
+    <div class="p-4 hover:bg-amber-50 transition-all card-hover border-l-4 border-amber-500">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex-1">
+          <div class="flex items-center gap-3 mb-2">
+            <span class="font-bold text-slate-800 text-lg">${order.invoice_number}</span>
+            <span class="px-3 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-bold">🔍 PICKING</span>
+          </div>
+          <p class="text-sm text-slate-600 mb-2">👤 <strong>${order.party_name}</strong> • 📦 <strong>${order.item_count}</strong> items</p>
+          <div class="bg-amber-50 px-3 py-2 rounded-lg">
+            <p class="text-sm font-semibold text-amber-900">Assigned Picker: <span class="text-amber-700 font-bold">${order.picker_name}</span></p>
+          </div>
+        </div>
+        <button onclick="markPickingDone('${order.id}')" class="px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-semibold hover:from-amber-600 hover:to-orange-600 transition-all shadow-lg whitespace-nowrap">✓ Picking Done</button>
+      </div>
+    </div>`).join('');
+}
+
+function renderCheckingQueue() {
+  const container = document.getElementById('checking-list');
+  const items = orders.filter(o => o.status === 'checking');
+  document.getElementById('checking-count').textContent = `${items.length} items`;
+  if (!items.length) { container.innerHTML = '<div class="p-8 text-center text-slate-400"><p>No items awaiting checking.</p></div>'; return; }
+  container.innerHTML = items.map(order => `
+    <div class="p-4 hover:bg-blue-50 transition-all card-hover border-l-4 border-blue-500">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex-1">
+          <div class="flex items-center gap-3 mb-2">
+            <span class="font-bold text-slate-800 text-lg">${order.invoice_number}</span>
+            <span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-bold">✓ CHECKING</span>
+          </div>
+          <p class="text-sm text-slate-600 mb-2">👤 <strong>${order.party_name}</strong> • 📦 <strong>${order.item_count}</strong> items</p>
+          <div class="bg-blue-50 px-3 py-2 rounded-lg">
+            <p class="text-sm text-blue-900">Picked by: <strong>${order.picker_name}</strong> • Checker: <strong>${order.checker_name}</strong></p>
+          </div>
+        </div>
+        <button onclick="markCheckingDone('${order.id}')" class="px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg whitespace-nowrap">✓ Checking Done</button>
+      </div>
+    </div>`).join('');
+}
+
+function renderEmployees() {
+  const container = document.getElementById('employees-list');
+  document.getElementById('employee-count').textContent = `${employees.length} employees`;
+  if (!employees.length) { container.innerHTML = '<div class="p-8 text-center text-slate-400"><p>No employees yet.</p></div>'; return; }
+
+  const roleLabels = { picker: 'Picker', checker: 'Checker', both: 'Picker & Checker' };
+  const levelLabels = { junior: 'Junior', intermediate: 'Intermediate', senior: 'Senior', expert: 'Expert' };
+  const levelColors = { junior: 'bg-slate-100 text-slate-600', intermediate: 'bg-blue-100 text-blue-700', senior: 'bg-purple-100 text-purple-700', expert: 'bg-amber-100 text-amber-700' };
+
+  container.innerHTML = employees.map(emp => `
+    <div class="p-4 hover:bg-slate-50 transition-all card-hover">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 bg-gradient-to-br from-slate-200 to-slate-300 rounded-full flex items-center justify-center text-slate-600 font-bold">
+            ${emp.employee_name.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <p class="font-semibold text-slate-800">${emp.employee_name}</p>
+            <div class="flex items-center gap-2 mt-1">
+              <span class="text-xs text-slate-500">${roleLabels[emp.employee_role] || emp.employee_role}</span>
+              <span class="status-badge ${levelColors[emp.employee_level]}">${levelLabels[emp.employee_level]}</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" ${emp.employee_present ? 'checked' : ''} onchange="toggleAttendance('${emp.id}', this.checked)" class="w-4 h-4 rounded text-emerald-500">
+            <span class="text-xs text-slate-600">Present</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" ${emp.employee_available ? 'checked' : ''} onchange="toggleAvailability('${emp.id}', this.checked)" class="w-4 h-4 rounded text-blue-500">
+            <span class="text-xs text-slate-600">Available</span>
+          </label>
+          <button onclick="deleteEmployee('${emp.id}')" class="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function renderAnalytics() {
+  const total = orders.length;
+  const inProgress = orders.filter(o => !['delivered', 'pending'].includes(o.status)).length;
+  const delivered = orders.filter(o => o.status === 'delivered').length;
+  const activeStaff = employees.filter(e => e.employee_present && e.employee_available).length;
+
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-progress').textContent = inProgress;
+  document.getElementById('stat-delivered').textContent = delivered;
+  document.getElementById('stat-staff').textContent = activeStaff;
+  document.getElementById('total-records').textContent = orders.length + employees.length;
+  document.getElementById('total-orders-count').textContent = orders.length;
+  document.getElementById('total-employees-count').textContent = employees.length;
+
+  // Status distribution
+  const statusCounts = { pending: 0, picking: 0, checking: 0, packing: 0, ready: 0, delivered: 0 };
+  orders.forEach(o => { if (statusCounts[o.status] !== undefined) statusCounts[o.status]++; });
+  const statusLabels = { pending: 'Pending', picking: 'Picking', checking: 'Checking', packing: 'Packing', ready: 'Ready', delivered: 'Delivered' };
+  const statusBarColors = { pending: 'bg-slate-400', picking: 'bg-amber-500', checking: 'bg-blue-500', packing: 'bg-purple-500', ready: 'bg-emerald-400', delivered: 'bg-emerald-600' };
+
+  const statusChart = document.getElementById('status-chart');
+  if (!total) { statusChart.innerHTML = '<div class="text-center text-slate-400 py-8">No data available</div>'; }
+  else {
+    statusChart.innerHTML = Object.entries(statusCounts).map(([status, count]) => {
+      const pct = Math.round((count / total) * 100);
+      return `<div class="flex items-center gap-3">
+        <span class="w-20 text-xs text-slate-600">${statusLabels[status]}</span>
+        <div class="flex-1 h-6 bg-slate-100 rounded-full overflow-hidden">
+          <div class="${statusBarColors[status]} h-full rounded-full" style="width:${pct}%"></div>
+        </div>
+        <span class="w-12 text-xs text-slate-500 text-right">${count} (${pct}%)</span>
+      </div>`;
+    }).join('');
+  }
+
+  // Performance
+  const perfChart = document.getElementById('performance-chart');
+  const empStats = employees.map(emp => {
+    const picked = orders.filter(o => o.picker_id === emp.id && ['checking','packing','ready','delivered'].includes(o.status)).length;
+    const checked = orders.filter(o => o.checker_id === emp.id && ['packing','ready','delivered'].includes(o.status)).length;
+    return { name: emp.employee_name, picked, checked, total: picked + checked };
+  }).filter(e => e.total > 0).sort((a,b) => b.total - a.total).slice(0, 5);
+
+  if (!empStats.length) { perfChart.innerHTML = '<div class="text-center text-slate-400 py-8">No performance data yet</div>'; }
+  else {
+    const maxT = Math.max(...empStats.map(e => e.total));
+    perfChart.innerHTML = empStats.map(e => `
+      <div class="flex items-center gap-3">
+        <span class="w-24 text-xs text-slate-600 truncate">${e.name}</span>
+        <div class="flex-1 h-6 bg-slate-100 rounded-full overflow-hidden flex">
+          <div class="bg-amber-500 h-full" style="width:${maxT > 0 ? (e.picked/maxT)*100 : 0}%"></div>
+          <div class="bg-blue-500 h-full" style="width:${maxT > 0 ? (e.checked/maxT)*100 : 0}%"></div>
+        </div>
+        <span class="w-16 text-xs text-slate-500 text-right">${e.total} tasks</span>
+      </div>`).join('') + '<div class="flex items-center gap-4 justify-center mt-4 text-xs"><span class="flex items-center gap-1"><span class="w-3 h-3 bg-amber-500 rounded"></span>Picked</span><span class="flex items-center gap-1"><span class="w-3 h-3 bg-blue-500 rounded"></span>Checked</span></div>';
+  }
+
+  // Activity log
+  const actLog = document.getElementById('activity-log');
+  const recent = [...orders].sort((a,b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 10);
+  if (!recent.length) { actLog.innerHTML = '<div class="text-center text-slate-400 py-8">No recent activity</div>'; }
+  else {
+    actLog.innerHTML = recent.map(o => `
+      <div class="flex items-center gap-3 p-2 bg-slate-50 rounded-lg">
+        <span class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">📦</span>
+        <div class="flex-1">
+          <p class="text-sm text-slate-700"><strong>${o.invoice_number}</strong> — ${o.party_name}</p>
+          <p class="text-xs text-slate-500">Status: ${o.status} • ${new Date(o.created_at).toLocaleString()}</p>
+        </div>
+      </div>`).join('');
+  }
+}
+
+// ──────────────────────────────────────────────
+//  ORDER ACTIONS
+// ──────────────────────────────────────────────
+async function assignPicker(orderId) {
+  const order = orders.find(o => o.id === orderId);
+  if (!order) return;
+  const picker = getSuitablePicker(order.item_count);
+  if (!picker) { showToast('No available picker found', 'error'); return; }
+  try {
+    await dbUpdate(orderId, { status: 'picking', picker_id: picker.id, picker_name: picker.employee_name });
+    showToast(`Assigned to ${picker.employee_name}`, 'success');
+  } catch(e) { showToast('Failed: ' + e.message, 'error'); }
+}
+
+async function markPickingDone(orderId) {
+  const order = orders.find(o => o.id === orderId);
+  if (!order) return;
+  const checker = getSuitableChecker(order.picker_id);
+  if (!checker) { showToast('No available checker found', 'error'); return; }
+  try {
+    await dbUpdate(orderId, { status: 'checking', checker_id: checker.id, checker_name: checker.employee_name, picking_done_at: new Date().toISOString() });
+    showToast(`Checker assigned: ${checker.employee_name}`, 'success');
+  } catch(e) { showToast('Failed: ' + e.message, 'error'); }
+}
+
+async function markCheckingDone(orderId) {
+  try {
+    await dbUpdate(orderId, { status: 'packing', checking_done_at: new Date().toISOString() });
+    showToast('Packing started', 'success');
+  } catch(e) { showToast('Failed: ' + e.message, 'error'); }
+}
+
+async function markPackingDone(orderId) {
+  try {
+    await dbUpdate(orderId, { status: 'ready', packing_done_at: new Date().toISOString() });
+    showToast('Ready for delivery', 'success');
+  } catch(e) { showToast('Failed: ' + e.message, 'error'); }
+}
+
+async function markDelivered(orderId) {
+  try {
+    await dbUpdate(orderId, { status: 'delivered', delivered_at: new Date().toISOString() });
+    showToast('Order delivered! 🎉', 'success');
+  } catch(e) { showToast('Failed: ' + e.message, 'error'); }
+}
+
+async function deleteOrder(orderId) {
+  showConfirmModal('Delete Order', 'Are you sure you want to delete this order?', async () => {
+    try { await dbDelete(orderId); showToast('Order deleted', 'success'); }
+    catch(e) { showToast('Failed: ' + e.message, 'error'); }
+  });
+}
+
+// ──────────────────────────────────────────────
+//  EMPLOYEE ACTIONS
+// ──────────────────────────────────────────────
+async function toggleAvailability(empId, available) {
+  const emp = employees.find(e => e.id === empId);
+  try {
+    await dbUpdate(empId, { employee_available: available });
+    showToast(`${emp.employee_name} ${available ? 'available' : 'unavailable'}`, 'info');
+  } catch(e) { showToast('Failed: ' + e.message, 'error'); }
+}
+
+async function toggleAttendance(empId, present) {
+  const emp = employees.find(e => e.id === empId);
+  try {
+    await dbUpdate(empId, { employee_present: present });
+    showToast(`${emp.employee_name} marked ${present ? 'present' : 'absent'}`, 'info');
+  } catch(e) { showToast('Failed: ' + e.message, 'error'); }
+}
+
+async function deleteEmployee(empId) {
+  showConfirmModal('Delete Employee', 'Are you sure you want to remove this employee?', async () => {
+    try { await dbDelete(empId); showToast('Employee removed', 'success'); }
+    catch(e) { showToast('Failed: ' + e.message, 'error'); }
+  });
+}
+
+// ──────────────────────────────────────────────
+//  FORMS
+// ──────────────────────────────────────────────
+document.getElementById('order-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const invoiceNumber = document.getElementById('invoice-number').value.trim();
+  const partyName = document.getElementById('party-name').value.trim();
+  const itemCount = parseInt(document.getElementById('item-count').value);
+  const pickerSelect = document.getElementById('picker-select').value;
+
+  let picker = null;
+  if (pickerSelect === 'auto') picker = getSuitablePicker(itemCount);
+  else picker = employees.find(e => e.id === pickerSelect);
+
+  const data = {
+    type: 'order',
+    invoice_number: invoiceNumber,
+    party_name: partyName,
+    item_count: itemCount,
+    status: picker ? 'picking' : 'pending',
+    picker_id: picker ? picker.id : '',
+    picker_name: picker ? picker.employee_name : '',
+    checker_id: '', checker_name: '',
+    picking_done_at: null, checking_done_at: null, packing_done_at: null, delivered_at: null,
+    created_at: new Date().toISOString()
+  };
+
+  try {
+    await dbCreate(data);
+    showToast(picker ? `Order created & assigned to ${picker.employee_name}` : 'Order created (pending)', 'success');
+    e.target.reset();
+  } catch(err) { showToast('Failed to create order: ' + err.message, 'error'); }
+});
+
+document.getElementById('employee-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const data = {
+    type: 'employee',
+    employee_name: document.getElementById('emp-name').value.trim(),
+    employee_role: document.getElementById('emp-role').value,
+    employee_level: document.getElementById('emp-level').value,
+    employee_available: document.getElementById('emp-available').checked,
+    employee_present: true,
+    created_at: new Date().toISOString()
+  };
+  try {
+    await dbCreate(data);
+    showToast('Employee added', 'success');
+    e.target.reset();
+    document.getElementById('emp-available').checked = true;
+  } catch(err) { showToast('Failed to add employee: ' + err.message, 'error'); }
+});
+
+// ──────────────────────────────────────────────
+//  DATA MANAGEMENT
+// ──────────────────────────────────────────────
+function getDateFromPeriod(period) {
+  const now = new Date();
+  const d = new Date();
+  if (period === '7days') d.setDate(now.getDate() - 7);
+  else if (period === '30days') d.setDate(now.getDate() - 30);
+  else if (period === '90days') d.setDate(now.getDate() - 90);
+  else if (period === '6months') d.setMonth(now.getMonth() - 6);
+  else if (period === '1year') d.setFullYear(now.getFullYear() - 1);
+  else return new Date(0);
+  return d;
+}
+
+async function deleteOrdersByPeriod() {
+  const period = document.getElementById('delete-period').value;
+  const cutoff = getDateFromPeriod(period);
+  const toDelete = orders.filter(o => o.status === 'delivered' && new Date(o.created_at) < cutoff);
+
+  if (!toDelete.length) { showToast('No delivered orders found in this period', 'info'); return; }
+
+  showConfirmModal('Delete Orders', `Delete ${toDelete.length} delivered order(s)? Cannot be undone.`, async () => {
+    let deleted = 0, failed = 0;
+    for (const order of toDelete) {
+      try { await dbDelete(order.id); deleted++; }
+      catch { failed++; }
+    }
+    if (deleted) showToast(`Deleted ${deleted} order(s)`, 'success');
+    if (failed) showToast(`Failed to delete ${failed} order(s)`, 'error');
+    await loadAllData();
+  });
+}
+
+// ──────────────────────────────────────────────
+//  UI UTILITIES
+// ──────────────────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  ['orders', 'employees', 'analytics'].forEach(t => {
+    document.getElementById(`tab-${t}`).classList.toggle('tab-active', t === tab);
+    document.getElementById(`tab-${t}`).classList.toggle('text-slate-600', t !== tab);
+    document.getElementById(`content-${t}`).classList.toggle('hidden', t !== tab);
+  });
+  if (tab === 'analytics') renderAnalytics();
+}
+
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  const bgColor = type === 'success' ? 'bg-emerald-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+  toast.className = `${bgColor} text-white px-4 py-3 rounded-xl shadow-lg animate-in flex items-center gap-2`;
+  toast.innerHTML = `<span>${type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'}</span><span>${message}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+function showConfirmModal(title, message, onConfirm) {
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-message').textContent = message;
+  document.getElementById('confirm-modal').classList.remove('hidden');
+  pendingConfirmAction = onConfirm;
+}
+
+function closeConfirmModal() {
+  document.getElementById('confirm-modal').classList.add('hidden');
+  pendingConfirmAction = null;
+}
+
+document.getElementById('confirm-btn').addEventListener('click', async () => {
+  if (pendingConfirmAction) await pendingConfirmAction();
+  closeConfirmModal();
+});
+</script>
+</body>
+</html>
